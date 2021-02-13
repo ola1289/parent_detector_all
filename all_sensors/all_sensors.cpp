@@ -19,30 +19,26 @@
 using namespace std;
 
 int sound_interr = 0;
-int low_temp_limit = -1;
-int upp_temp_limit = -1;
+int pir_interr = 0;
+float low_temp_limit = -1;
+float upp_temp_limit = -1;
 
-int getTemperature(int dev_addr, int reg_addr)
+float getTemperature(int dev_addr, int reg_addr)
 {
 	int temp_reg = wiringPiI2CReadReg16(dev_addr, reg_addr);
 	int t = temp_reg;
-	int M_sb = temp_reg & 0x000f; //clear <15-13> bits
+	int M_sb = temp_reg & 0x000f; //clear <15-12> bits
 	int L_sb = (t & 0xff00)>>8;
 
-	int temp = (M_sb*16) + (L_sb/16);
+	float temp = (M_sb*16) + static_cast< float >(L_sb) /16;
 
 	return temp;
 }
 
-int pir_interrupt(void)
+void pir_interrupt(void)
 {
-	if(digitalRead(PIR) == HIGH)
-	{
-		cout<<"move detected!"<<endl;
-		return 1;
-	}
-	else
-		return 0;
+	cout<<"move detected!"<<endl;
+	pir_interr = 1;
 }
 
 void sound_interrupt(void)
@@ -53,11 +49,13 @@ void sound_interrupt(void)
 
 int temp_hot(int &handle, int upp_temp_limit)
 {
-	int current_temp = getTemperature(handle,TEMP_REG);
+	float current_temp = getTemperature(handle,TEMP_REG);
 
 	if(current_temp >= upp_temp_limit)
 	{
+		cout << "current_temp = " << current_temp << " upp_temp_limit = " << upp_temp_limit << endl;
 		cout<<"Too hot"<<endl;
+
 		return 1;
 	}
 	else
@@ -66,12 +64,13 @@ int temp_hot(int &handle, int upp_temp_limit)
 
 int temp_cold(int &handle, int low_temp_limit)
 {
-	int current_temp = getTemperature(handle,TEMP_REG);
+	float current_temp = getTemperature(handle,TEMP_REG);
 
 	if(current_temp <= low_temp_limit)
 	{
+		cout << "current_temp = " << current_temp << " low_temp_limit = " << low_temp_limit << endl;
 		cout<<"Too cold"<<endl;
-		cout << std::hex << current_temp << endl;
+
 		return 1;
 	}
 	else
@@ -81,8 +80,9 @@ int temp_cold(int &handle, int low_temp_limit)
 int setup(int &handle, int &fd)
 {
 		cout << "SETUP STARTED"<<endl;
-		//inicjacja wiringPi i  podpiêcie funkcji przerwania
-        if (fd==-1 || handle==-1 || wiringPiISR(SOUNDPIN, INT_EDGE_BOTH, &sound_interrupt) <0)
+
+        if (fd==-1 || handle==-1 || wiringPiISR(SOUNDPIN, INT_EDGE_RISING, &sound_interrupt) <0
+        		|| wiringPiISR(PIR, INT_EDGE_RISING, &pir_interrupt) <0)
         {
         	cout << "Failed to init WiringPi communication.\n";
             return -1;
@@ -90,8 +90,8 @@ int setup(int &handle, int &fd)
 
     	//write to i2c
         cout << "Temperature Sensor Setup started" << endl;
-    	wiringPiI2CWriteReg16(handle, T_UP_REG,0x9101);//ustawienie górnego pu³apu temp 25 C
-    	wiringPiI2CWriteReg16(handle, T_DOWN_REG,0x2101); //ustawienie dolnego pu³apu temp 18 C
+    	wiringPiI2CWriteReg16(handle, T_UP_REG,0x9101); //upper temp treshold set to 25 C
+    	wiringPiI2CWriteReg16(handle, T_DOWN_REG,0x2101); //lower temp treshold set to 18 C
 
     	upp_temp_limit = getTemperature(handle, T_UP_REG);
     	low_temp_limit = getTemperature(handle, T_DOWN_REG);
@@ -132,7 +132,7 @@ int setup(int &handle, int &fd)
     		return -1;
     	}
 
-        cout << "SETUP OK"<<endl;
+        cout << "SETUP OK"<< endl << "End of Setup" << endl;
         return 1;
 }
 
@@ -150,32 +150,39 @@ int main(int argc, char **argv)
     	while(1)
     	{
 
-    		if (sound_interr || pir_interrupt() == 1 ||
+    		if (sound_interr || pir_interr ||
     				temp_hot(handle, upp_temp_limit) == 1 || temp_cold(handle, low_temp_limit) == 1)
     		{
-    			cout << "Interrupt detected" << endl;
     			sound_interr = 0;
+    			pir_interr = 0;
+    			counter = 0;//each event clears counter in order to continue recording
 
     			if (camera_status == 0)
     			{
-    				cout << "Start capturing" << endl;
+    				cout << "Start capturing the video" << endl;
     				system("pkill -USR1 raspivid");
     				camera_status = 1;
     			}
+    			cout << "Waiting for next event" << endl;
     		}
-    		delay(500); //ominiêcie delay oznacza obci¹¿enie procesora 25%, tu spada do 2%
+    		delay(500); //delay for decreasing cpu load
 
     		if (camera_status)
-    			++counter; //delay after event detection
+    			++counter; //camera should run for period of time after last event
 
     		if (counter > 100)
     		{
-    			cout << "Stop capturing" << endl;
+    			cout << "Stop capturing the video" << endl;
     			system("pkill -USR1 raspivid");
     			camera_status = 0;
     			counter = 0;
     		}
     	}
     }
-        return 0;
+    else
+    {
+    	cout << "SETUP FAILURE" << endl;
+    }
+
+    return 0;
 }
