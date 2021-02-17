@@ -4,7 +4,7 @@
 #include <iostream>
 #include <wiringPiI2C.h>
 #include <time.h>
-#include <bitset>
+//#include <bitset>
 
 #define SOUNDPIN 6
 #define PIR 1
@@ -81,8 +81,7 @@ int setup(int &handle, int &fd)
 {
 		cout << "SETUP STARTED"<<endl;
 
-        if (fd==-1 || handle==-1 || wiringPiISR(SOUNDPIN, INT_EDGE_RISING, &sound_interrupt) <0
-        		|| wiringPiISR(PIR, INT_EDGE_RISING, &pir_interrupt) <0)
+        if (fd==-1 || handle==-1)
         {
         	cout << "Failed to init WiringPi communication.\n";
             return -1;
@@ -110,7 +109,7 @@ int setup(int &handle, int &fd)
     	}
 
         cout << "Initialize camera" << endl;
-    	system("raspivid -s -t 0 -b 8000000 -o /home/pi/win_share/cam_01.h264 &");
+        system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
 
     	//checking if raspivid process has been started
     	FILE *cmd = popen("pgrep raspivid", "r");
@@ -123,6 +122,7 @@ int setup(int &handle, int &fd)
 
     	if(raspivid_pid > 0)
     	{
+        	delay(1000);
     		system("pkill -USR1 raspivid"); //send signal to stop capturing - end of initialization
     		cout << "Camera ok" << endl;
     	}
@@ -131,6 +131,13 @@ int setup(int &handle, int &fd)
     		cout << "Camera failure" << endl;
     		return -1;
     	}
+
+        if (wiringPiISR(SOUNDPIN, INT_EDGE_RISING, &sound_interrupt) <0
+        		|| wiringPiISR(PIR, INT_EDGE_RISING, &pir_interrupt) <0)
+        {
+        	cout << "Failed to init interrupts.\n";
+            return -1;
+        }
 
         cout << "SETUP OK"<< endl << "End of Setup" << endl;
         return 1;
@@ -155,7 +162,7 @@ int main(int argc, char **argv)
     		{
     			sound_interr = 0;
     			pir_interr = 0;
-    			counter = 0;//each event clears counter in order to continue recording
+    			counter = 0;	//each event clears counter in order to continue recording
 
     			if (camera_status == 0)
     			{
