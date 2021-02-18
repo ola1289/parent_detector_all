@@ -4,6 +4,7 @@
 #include <iostream>
 #include <wiringPiI2C.h>
 #include <time.h>
+#include <iomanip>
 //#include <bitset>
 
 #define SOUNDPIN 6
@@ -15,19 +16,20 @@
 #define T_UP_REG 0x02
 #define T_DOWN_REG 0x03
 #define T_CRIT_REG 0x04
+#define FIXED_FLOAT(x) setprecision(2)<<fixed<<(x)
 
 using namespace std;
 
 int sound_interr = 0;
-int sound_counter = 0;
+int sound_flag = 0;
 
 int pir_interr = 0;
-int pir_counter = 0;
+int pir_flag = 0;
 
-int low_temp_counter = 0;
+int low_temp_flag = 0;
 float low_temp_limit = -1;
 
-int upp_temp_counter = 0;
+int upp_temp_flag = 0;
 float upp_temp_limit = -1;
 
 
@@ -46,11 +48,11 @@ float getTemperature(int dev_addr, int reg_addr)
 void pir_interrupt(void)
 {
 	cout << "move detected!" << endl;
-	if(pir_counter == 0)
+	if(pir_flag == 0)
 	{
-		system("echo \"Move detected!\" | mail -s \"Move alert!\" MyPi1289@gmail.com");
+		system("echo \"Move detected!\" | mail -s \"#RPi Move alert!\" MyPi1289@gmail.com");
 	}
-	pir_counter++;
+	pir_flag = 1;
 
 	pir_interr = 1;
 }
@@ -58,11 +60,11 @@ void pir_interrupt(void)
 void sound_interrupt(void)
 {
 	cout << "noise detected!"<< endl;
-	if(sound_counter == 0)
+	if(sound_flag == 0)
 	{
-		system("echo \"Noise detected!\" | mail -s \"Noise alert!\" MyPi1289@gmail.com");
+		system("echo \"Noise detected!\" | mail -s \"#RPi Noise alert!\" MyPi1289@gmail.com");
 	}
-	sound_counter++;
+	sound_flag = 1;
 
 	sound_interr = 1;
 }
@@ -73,14 +75,14 @@ int temp_hot(int &handle, int upp_temp_limit)
 
 	if(current_temp >= upp_temp_limit)
 	{
-		cout << "current_temp = " << current_temp << " upp_temp_limit = " << upp_temp_limit << endl;
+		cout << "current_temp = " << FIXED_FLOAT(current_temp) << " upp_temp_limit = " << FIXED_FLOAT(upp_temp_limit) << endl;
 		cout<<"Temperature too high!"<<endl;
 
-		if(upp_temp_counter == 0)
+		if(upp_temp_flag == 0)
 		{
-			system("echo \"Temperature too high!\" | mail -s \"High temperature alert!\" MyPi1289@gmail.com");
+			system("echo \"Temperature too high!\" | mail -s \"#RPi High temperature alert!\" MyPi1289@gmail.com");
 		}
-		upp_temp_counter++;
+		upp_temp_flag = 1;
 
 		return 1;
 	}else
@@ -93,14 +95,14 @@ int temp_cold(int &handle, int low_temp_limit)
 
 	if(current_temp <= low_temp_limit)
 	{
-		cout << "current_temp = " << current_temp << " low_temp_limit = " << low_temp_limit << endl;
+		cout << "current_temp = " << FIXED_FLOAT(current_temp) << " low_temp_limit = " << FIXED_FLOAT(low_temp_limit) << endl;
 		cout<<"Too cold"<<endl;
 
-		if(low_temp_counter == 0)
+		if(low_temp_flag == 0)
 		{
-			system("echo \"Temperature too low!\" | mail -s \"Low temperature alert!\" MyPi1289@gmail.com");
+			system("echo \"Temperature too low!\" | mail -s \"#RPi Low temperature alert!\" MyPi1289@gmail.com");
 		}
-		low_temp_counter++;
+		low_temp_flag = 1;
 
 		return 1;
 	}else
@@ -119,8 +121,8 @@ int setup(int &handle, int &fd)
 
     	//write to i2c
         cout << "Temperature Sensor Setup started" << endl;
-    	wiringPiI2CWriteReg16(handle, T_UP_REG,0x9101); //upper temp treshold set to 25 C
-    	wiringPiI2CWriteReg16(handle, T_DOWN_REG,0x2101); //lower temp treshold set to 18 C
+    	wiringPiI2CWriteReg16(handle, T_UP_REG,0x9101); //upper temp treshold set to 23 C
+    	wiringPiI2CWriteReg16(handle, T_DOWN_REG,0x2101); //lower temp treshold set to 21 C
 
     	upp_temp_limit = getTemperature(handle, T_UP_REG);
     	low_temp_limit = getTemperature(handle, T_DOWN_REG);
@@ -139,9 +141,7 @@ int setup(int &handle, int &fd)
     	}
 
         cout << "Initialize camera" << endl;
-        //system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
-
-        system("raspivid -s -t 0 -b 8000000 -o /home/pi/win_share/cam_01.h264 &"); //temporary
+        system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
 
         //checking if raspivid process has been started
     	FILE *cmd = popen("pgrep raspivid", "r");
@@ -214,10 +214,10 @@ int main(int argc, char **argv)
     			camera_status = 0;
     			counter = 0;
 
-    			sound_counter = 0;
-    			pir_counter = 0;
-    			low_temp_counter = 0;
-    			upp_temp_counter = 0;
+    			sound_flag = 0;
+    			pir_flag = 0;
+    			low_temp_flag = 0;
+    			upp_temp_flag = 0;
 
     		}
     	}
