@@ -19,9 +19,17 @@
 using namespace std;
 
 int sound_interr = 0;
+int sound_counter = 0;
+
 int pir_interr = 0;
+int pir_counter = 0;
+
+int low_temp_counter = 0;
 float low_temp_limit = -1;
+
+int upp_temp_counter = 0;
 float upp_temp_limit = -1;
+
 
 float getTemperature(int dev_addr, int reg_addr)
 {
@@ -37,13 +45,25 @@ float getTemperature(int dev_addr, int reg_addr)
 
 void pir_interrupt(void)
 {
-	cout<<"move detected!"<<endl;
+	cout << "move detected!" << endl;
+	if(pir_counter == 0)
+	{
+		system("echo \"Move detected!\" | mail -s \"Move alert!\" MyPi1289@gmail.com");
+	}
+	pir_counter++;
+
 	pir_interr = 1;
 }
 
 void sound_interrupt(void)
 {
-	cout<<"noise detected!"<<endl;
+	cout << "noise detected!"<< endl;
+	if(sound_counter == 0)
+	{
+		system("echo \"Noise detected!\" | mail -s \"Noise alert!\" MyPi1289@gmail.com");
+	}
+	sound_counter++;
+
 	sound_interr = 1;
 }
 
@@ -54,11 +74,16 @@ int temp_hot(int &handle, int upp_temp_limit)
 	if(current_temp >= upp_temp_limit)
 	{
 		cout << "current_temp = " << current_temp << " upp_temp_limit = " << upp_temp_limit << endl;
-		cout<<"Too hot"<<endl;
+		cout<<"Temperature too high!"<<endl;
+
+		if(upp_temp_counter == 0)
+		{
+			system("echo \"Temperature too high!\" | mail -s \"High temperature alert!\" MyPi1289@gmail.com");
+		}
+		upp_temp_counter++;
 
 		return 1;
-	}
-	else
+	}else
 		return 0;
 }
 
@@ -71,9 +96,14 @@ int temp_cold(int &handle, int low_temp_limit)
 		cout << "current_temp = " << current_temp << " low_temp_limit = " << low_temp_limit << endl;
 		cout<<"Too cold"<<endl;
 
+		if(low_temp_counter == 0)
+		{
+			system("echo \"Temperature too low!\" | mail -s \"Low temperature alert!\" MyPi1289@gmail.com");
+		}
+		low_temp_counter++;
+
 		return 1;
-	}
-	else
+	}else
 		return 0;
 }
 
@@ -109,9 +139,11 @@ int setup(int &handle, int &fd)
     	}
 
         cout << "Initialize camera" << endl;
-        system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
+        //system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
 
-    	//checking if raspivid process has been started
+        system("raspivid -s -t 0 -b 8000000 -o /home/pi/win_share/cam_01.h264 &"); //temporary
+
+        //checking if raspivid process has been started
     	FILE *cmd = popen("pgrep raspivid", "r");
     	char result[24]={0x0};
     	int raspivid_pid = 0;
@@ -156,9 +188,7 @@ int main(int argc, char **argv)
     	cout << "Waiting for any event" << endl;
     	while(1)
     	{
-
-    		if (sound_interr || pir_interr ||
-    				temp_hot(handle, upp_temp_limit) == 1 || temp_cold(handle, low_temp_limit) == 1)
+    		if (sound_interr || pir_interr || temp_hot(handle, upp_temp_limit) == 1 || temp_cold(handle, low_temp_limit) == 1)
     		{
     			sound_interr = 0;
     			pir_interr = 0;
@@ -183,6 +213,12 @@ int main(int argc, char **argv)
     			system("pkill -USR1 raspivid");
     			camera_status = 0;
     			counter = 0;
+
+    			sound_counter = 0;
+    			pir_counter = 0;
+    			low_temp_counter = 0;
+    			upp_temp_counter = 0;
+
     		}
     	}
     }
