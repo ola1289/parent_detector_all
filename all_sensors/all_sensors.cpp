@@ -212,10 +212,9 @@ int main(int argc, char **argv)
     			{
     				cout << "Start capturing the video" << endl;
     				system("pkill -USR1 raspivid");
-    				//system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
     				camera_status = 1;
 
-    			}else if(camera_status == 0 && raspivid_pid == 0) //jaki pid
+    			}else if(camera_status == 0 && raspivid_pid == 0)
     			{
     				cout << "Start capturing the video" << endl;
     				system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
@@ -229,7 +228,7 @@ int main(int argc, char **argv)
     		if (camera_status)
     			++counter; //camera should run for period of time after last event
 
-    		if (counter > 240) //240 x 0,5 s = 20 s
+    		if (counter > 240) //240 x 0,5 s = 2 min
     		{
 
     			cout << "Stop capturing the video" << endl;
@@ -250,7 +249,7 @@ int main(int argc, char **argv)
     			//uploading file on nextcloud
     			system("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 -H 'X-Method-Override: PUT' https://192.168.1.114/nextcloud/remote.php/dav/files/ola1289/");
 
-    			//removing file from disc - file is not overwriting so it get too big in time
+    			//removing file from disc - file is not overwriting so it would get too big in time
     			system("rm /home/pi/win_share/test_video.h264");
 
     		}
