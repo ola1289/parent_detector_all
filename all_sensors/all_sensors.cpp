@@ -20,18 +20,36 @@
 
 using namespace std;
 
+//raspivid
+int raspivid_pid = 0;
+
+//sound
 int sound_interr = 0;
 int sound_flag = 0;
 
+//pir
 int pir_interr = 0;
 int pir_flag = 0;
 
+//temp
 int low_temp_flag = 0;
 float low_temp_limit = -1;
 
 int upp_temp_flag = 0;
 float upp_temp_limit = -1;
 
+int get_pid(void)
+{
+	FILE *cmd = popen("pgrep raspivid", "r");
+	char result[24]={0x0};
+	//int raspivid_pid = 0;
+	fgets(result, sizeof(result), cmd);
+	raspivid_pid = atoi(result);
+	cout << "raspivid_pid = " << raspivid_pid << endl;
+	pclose(cmd);
+
+	return raspivid_pid;
+}
 
 float getTemperature(int dev_addr, int reg_addr)
 {
@@ -144,19 +162,14 @@ int setup(int &handle, int &fd)
         system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
 
         //checking if raspivid process has been started
-    	FILE *cmd = popen("pgrep raspivid", "r");
-    	char result[24]={0x0};
-    	int raspivid_pid = 0;
-    	fgets(result, sizeof(result), cmd);
-    	raspivid_pid = atoi(result);
-    	cout << "raspivid_pid = " << raspivid_pid << endl;
-    	pclose(cmd);
+        raspivid_pid = get_pid();
 
     	if(raspivid_pid > 0)
     	{
         	delay(1000);
     		system("pkill -USR1 raspivid"); //send signal to stop capturing - end of initialization
-    		cout << "Camera ok" << endl;
+        	//system("pkill -9 raspivid"); //killing raspivid process
+        	cout << "Camera ok" << endl;
     	}
     	else
     	{
@@ -194,33 +207,51 @@ int main(int argc, char **argv)
     			pir_interr = 0;
     			counter = 0;	//each event clears counter in order to continue recording
 
-    			if (camera_status == 0)
+    			//enters here only after killig process
+    			if (camera_status == 0 && raspivid_pid > 0)
     			{
     				cout << "Start capturing the video" << endl;
     				system("pkill -USR1 raspivid");
+    				//system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
+    				camera_status = 1;
+
+    			}else if(camera_status == 0 && raspivid_pid == 0) //jaki pid
+    			{
+    				cout << "Start capturing the video" << endl;
+    				system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
+    				raspivid_pid = get_pid();
     				camera_status = 1;
     			}
     			cout << "Waiting for next event" << endl;
     		}
-    		delay(500); //delay for decreasing cpu load
+    		delay(500); //delay for decreasing cpu load (0,5 S)
 
     		if (camera_status)
     			++counter; //camera should run for period of time after last event
 
-    		if (counter > 100)
+    		if (counter > 240) //240 x 0,5 s = 20 s
     		{
+
     			cout << "Stop capturing the video" << endl;
-    			system("pkill -USR1 raspivid");
+    			system("pkill -9 raspivid");
+
+    			raspivid_pid = 0;
     			camera_status = 0;
+
+    			//timing
     			counter = 0;
 
+    			// sensors flags
     			sound_flag = 0;
     			pir_flag = 0;
     			low_temp_flag = 0;
     			upp_temp_flag = 0;
 
-    			system("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 https://192.168.1.114/nextcloud/remote.php/dav/files/ola1289/"); //sending file to nextcloud
-    			system("rm /home/pi/win_share/test_video.h264"); //remowing file from disc
+    			//uploading file on nextcloud
+    			system("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 -H 'X-Method-Override: PUT' https://192.168.1.114/nextcloud/remote.php/dav/files/ola1289/");
+
+    			//removing file from disc - file is not overwriting so it get too big in time
+    			system("rm /home/pi/win_share/test_video.h264");
 
     		}
     	}
