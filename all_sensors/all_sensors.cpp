@@ -219,6 +219,9 @@ int main(int argc, char **argv)
     			low_temp_flag = 0;
     			upp_temp_flag = 0;
 
+    			system("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 https://192.168.1.114/nextcloud/remote.php/dav/files/ola1289/"); //sending file to nextcloud
+    			system("rm /home/pi/win_share/test_video.h264"); //remowing file from disc
+
     		}
     	}
     }
