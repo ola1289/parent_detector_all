@@ -5,10 +5,12 @@
 #include <wiringPiI2C.h>
 #include <time.h>
 #include <iomanip>
-//#include <bitset>
+#include <string>
 
+#define FIXED_FLOAT(x) setprecision(2)<<fixed<<(x)
 #define SOUNDPIN 6
 #define PIR 1
+
 //i2c
 #define DEV_ADDR 0x18
 #define TEMP_REG 0x05
@@ -16,7 +18,6 @@
 #define T_UP_REG 0x02
 #define T_DOWN_REG 0x03
 #define T_CRIT_REG 0x04
-#define FIXED_FLOAT(x) setprecision(2)<<fixed<<(x)
 
 using namespace std;
 
@@ -38,11 +39,30 @@ float low_temp_limit = -1;
 int upp_temp_flag = 0;
 float upp_temp_limit = -1;
 
+string get_ip(void)
+{
+	system("hostname -I > ip.txt");
+	FILE* ip = fopen("ip.txt", "r");
+	char result[24]={0x0};
+
+	fgets(result, sizeof(result), ip);
+	int size = sizeof(result) / sizeof(char);
+
+	string r_ip = "";
+	for (int i = 0; i < size; i++)
+	{
+		r_ip+= result[i];
+	}
+	pclose(ip);
+
+	return r_ip;
+}
+
 int get_pid(void)
 {
 	FILE *cmd = popen("pgrep raspivid", "r");
 	char result[24]={0x0};
-	//int raspivid_pid = 0;
+
 	fgets(result, sizeof(result), cmd);
 	raspivid_pid = atoi(result);
 	cout << "raspivid_pid = " << raspivid_pid << endl;
@@ -190,6 +210,9 @@ int setup(int &handle, int &fd)
 
 int main(int argc, char **argv)
 {
+	//IP
+	string ip = get_ip();
+	cout<< "current IP " << ip << endl;
 
 	int counter = 0;
 	int camera_status = 0;
@@ -207,14 +230,13 @@ int main(int argc, char **argv)
     			pir_interr = 0;
     			counter = 0;	//each event clears counter in order to continue recording
 
-    			//enters here only after killig process
-    			if (camera_status == 0 && raspivid_pid > 0)
+    			if (camera_status == 0 && raspivid_pid > 0) //enters here only during first loop
     			{
     				cout << "Start capturing the video" << endl;
     				system("pkill -USR1 raspivid");
     				camera_status = 1;
 
-    			}else if(camera_status == 0 && raspivid_pid == 0)
+    			}else if(camera_status == 0 && raspivid_pid == 0) //enters here after killig process
     			{
     				cout << "Start capturing the video" << endl;
     				system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
@@ -228,7 +250,7 @@ int main(int argc, char **argv)
     		if (camera_status)
     			++counter; //camera should run for period of time after last event
 
-    		if (counter > 240) //240 x 0,5 s = 2 min
+    		if (counter > 120) //240 x 0,5 s = 2 min
     		{
 
     			cout << "Stop capturing the video" << endl;
@@ -247,7 +269,10 @@ int main(int argc, char **argv)
     			upp_temp_flag = 0;
 
     			//uploading file on nextcloud
-    			system("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 -H 'X-Method-Override: PUT' https://192.168.1.114/nextcloud/remote.php/dav/files/ola1289/");
+    			string cmd("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 -H 'X-Method-Override: PUT' https://");
+    			cmd+=ip;
+    			cmd+="/nextcloud/remote.php/dav/files/ola1289/";
+    			system(cmd.c_str());
 
     			//removing file from disc - file is not overwriting so it would get too big in time
     			system("rm /home/pi/win_share/test_video.h264");
