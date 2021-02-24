@@ -48,6 +48,14 @@ string get_ip(void)
 	fgets(result, sizeof(result), ip);
 	int size = sizeof(result) / sizeof(char);
 
+	for (int i = 0; i < size; i++)
+	{
+		if (result[i] == ' ')
+		{
+			size = i;
+			break;
+		}
+	}
 	string r_ip = "";
 	for (int i = 0; i < size; i++)
 	{
@@ -159,8 +167,8 @@ int setup(int &handle, int &fd)
 
     	//write to i2c
         cout << "Temperature Sensor Setup started" << endl;
-    	wiringPiI2CWriteReg16(handle, T_UP_REG,0x9101); //upper temp treshold set to 23 C
-    	wiringPiI2CWriteReg16(handle, T_DOWN_REG,0x2101); //lower temp treshold set to 21 C
+    	wiringPiI2CWriteReg16(handle, T_UP_REG,0x9101); //upper temp treshold set to 25 C
+    	wiringPiI2CWriteReg16(handle, T_DOWN_REG,0x2101); //lower temp treshold set to 18 C
 
     	upp_temp_limit = getTemperature(handle, T_UP_REG);
     	low_temp_limit = getTemperature(handle, T_DOWN_REG);
@@ -179,6 +187,7 @@ int setup(int &handle, int &fd)
     	}
 
         cout << "Initialize camera" << endl;
+
         system("bash -c \"(raspivid -s -vf -o - -t 0 -n -w 320 -h 240 -fps 24 &) | (tee -a /home/pi/win_share/test_video.h264 &) | (cvlc -vvv stream:///dev/stdin --sout '#rtp{sdp=rtsp://:8000/}' :demux=h264 &)\"");
 
         //checking if raspivid process has been started
@@ -188,7 +197,6 @@ int setup(int &handle, int &fd)
     	{
         	delay(1000);
     		system("pkill -USR1 raspivid"); //send signal to stop capturing - end of initialization
-        	//system("pkill -9 raspivid"); //killing raspivid process
         	cout << "Camera ok" << endl;
     	}
     	else
@@ -247,10 +255,11 @@ int main(int argc, char **argv)
     		}
     		delay(500); //delay for decreasing cpu load (0,5 S)
 
-    		if (camera_status)
-    			++counter; //camera should run for period of time after last event
+    		if (camera_status){
+    			++counter;
+    		} //camera should run for period of time after last event
 
-    		if (counter > 120) //240 x 0,5 s = 2 min
+    		if (counter > 30) //240 x 0,5 s = 2 min
     		{
 
     			cout << "Stop capturing the video" << endl;
@@ -269,9 +278,11 @@ int main(int argc, char **argv)
     			upp_temp_flag = 0;
 
     			//uploading file on nextcloud
-    			string cmd("curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 -H 'X-Method-Override: PUT' https://");
+    			string cmd = "";
+    			cmd+="curl -k -u \"ola1289:Fiolek12345\" -T /home/pi/win_share/test_video.h264 -H 'X-Method-Override: PUT' https://";
     			cmd+=ip;
     			cmd+="/nextcloud/remote.php/dav/files/ola1289/";
+
     			system(cmd.c_str());
 
     			//removing file from disc - file is not overwriting so it would get too big in time
